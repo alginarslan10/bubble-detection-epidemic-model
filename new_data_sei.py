@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 import scipy.optimize as spo
 import scipy.integrate as spi
 import numpy as np
@@ -11,10 +9,9 @@ import datetime
 import pickle
 
 global_sse = []
-#times_to_try = 100
-alpha_init = 0.2
-beta_init = 0.4
-gamma_init = 0.1
+alpha_init = 0.1
+beta_init = 0.2
+gamma_init = 0.8
 average_follower = 300
 
 tweet_folder_name = "AAPL"
@@ -37,40 +34,33 @@ def diff_eqs(theta,t,alpha,beta,gamma,average_follower):
     result[2] = +(s*alpha) +(e*beta)
     
     return result
-"""
-def nonlinear_least_square_param_initial_value(model,xdata,ydata,initial_guess):
-    time_total = xdata
-    data_record = ydata
-    
-    I0 = ydata[0]
-    E0 = 0
-    S0 = average_total_user - I0 - E0
 
-    theta=[S0,E0,I0]
-    
-    bnds = ((0,1),(0,1),(0,1),(1,S0))
-    
-
-    min_value = spo.minimize(sse(model,theta,time_total,data_record),initial_guess,bounds=bnds).fun
-    return min_value
-"""
 
 #Nonlinear fitting part is based on the 
 def nonlinear_least_square_param(model,xdata,ydata,average_total_user,initial_guess):      
     time_total = xdata
     data_record = ydata
     
+    alpha=initial_guess[0]
+    beta=initial_guess[1]
+    gamma=initial_guess[2]
+    
     I0 = ydata[0]
     E0 = 0
     S0 = average_total_user - I0 - E0
     
     theta=[S0,E0,I0]
     
-    bnds = ((0,1),(0,1),(0,1),(0,S0))
+    xmin=[0,0,0,1]
+    xmax=[1,1,1,S0]
     
+    bnds = [(low,high) for low, high in zip(xmin,xmax)]
+    minimizer_kwargs = dict(method="L-BFGS-B",bounds=bnds)
+    
+    popt = spo.basinhopping(func=sse(model,theta,time_total,data_record),x0=initial_guess,minimizer_kwargs=minimizer_kwargs).x   
 
     
-    popt = spo.minimize(sse(model,theta,time_total,data_record),initial_guess,bounds=bnds).x
+    #popt = spo.minimize(sse(model,theta,time_total,data_record),initial_guess,bounds=bnds).x
     return popt
 
 def sse(model,theta,time_total,data_record):
@@ -82,13 +72,13 @@ def sse(model,theta,time_total,data_record):
         return diff
     return result
 
+
 #Prepration of data
 if not os.path.isfile(tweet_folder_name+"_dataframe.csv"):
     #Prep for reading multiple file 
     df = pd.DataFrame()
     pattern = os.path.join(tweet_folder_path)
     files_to_get = glob.glob(pattern)
-    
     
     tweets_per_day = []
     
@@ -98,7 +88,6 @@ if not os.path.isfile(tweet_folder_name+"_dataframe.csv"):
         tweets_per_day.append(len(data))
         df = df.append(data,ignore_index=True)
         
-    
     
     
     #Sort by date
@@ -129,7 +118,6 @@ first_x = datetime.datetime.strptime(df.iloc[0,0][0:-6],'%Y-%m-%d %H:%M:%S')
 seconds_in_day = 60*60*24
 
 
-
 #Append time passed
 for index,row in df.iterrows():
     
@@ -155,30 +143,8 @@ for i in range(len(df_x)):
 
 initial_guess = [alpha_init,beta_init,gamma_init,average_follower]
 
-#### Brute force init ####
-"""
-brute_force_list = np.arange(0.001,1,1/times_to_try)
-min_sse = 100000000000000000
 
-
-for alpha in brute_force_list: 
-    for beta in brute_force_list:
-        for gamma in brute_force_list:
-            
-            initial_guess[0] = alpha
-            initial_guess[1] = beta
-            initial_guess[2] = gamma
-            sse_new = nonlinear_least_square_param_initial_value(diff_eqs,df_x,df_infected,initial_guess)
-    
-        if(sse_new < min_sse):
-            alpha_init = alpha
-            beta_init = beta
-            gamma_init = gamma
-            min_sse = sse_new
-"""
-
-
-param = nonlinear_least_square_param(diff_eqs,df_x,df_infected,average_follower,initial_guess)
+param = nonlinear_least_square_param(diff_eqs,df_x,df_infected,average_total_user,initial_guess)
 y = spi.odeint(diff_eqs,theta,df_x,args=tuple(param))
 
 S,E,I = y.T
@@ -199,12 +165,9 @@ ax.yaxis.set_tick_params(length=0)
 ax.xaxis.set_tick_params(length=0)
 legend = ax.legend()
 
-
 ax.set_xlabel('Time(Days)')
 ax.set_ylabel('Infected(Millions)')
 
-
 axes=plt.gca()
-#axes.set_ylim(0,df_infected[-1]+1000)
 plt.show()
 plt.savefig(tweet_folder_name+".png")
