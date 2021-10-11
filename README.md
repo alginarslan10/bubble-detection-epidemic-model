@@ -1,1 +1,1 @@
-An analysis work with compartemental epidemic modeling to show Gamestop stock bubble.
+An analysis work with compartemental epidemic modeling over the Gamestop stock
